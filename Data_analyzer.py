@@ -1,0 +1,199 @@
+import pandas as pd
+import numpy as np
+
+
+# This Python program performs Ordinary Least Squares (OLS) regression. This statistical technique estimates
+# the relationship between a dependent variable (y) and one or more independent variables (x1, x2, ...).
+# The result of the OLS regression is a formula in the form: y = beta0 + beta1*x1 + beta2*x2 + ... + betan*xn.
+# The program accepts datasets in .csv, .xlsx, or .xls format and outputs the regression formula.
+# Note: This program handles only numeric variables for OLS regression.
+# Author: Camilo Silva G.
+
+
+def load_data_file(file_path):
+    """
+    Loads data from the specified file. Supports .csv, .xlsx, or .xls formats.
+
+    Args:
+        file_path (str): Path to the data file.
+
+    Returns:
+        pandas.DataFrame: DataFrame with numeric columns, or None if an error occurs.
+
+    Raises:
+        FileNotFoundError: If the specified file is not found at `file_path`.
+        ValueError: If the file format is not supported (not .csv, .xlsx, or .xls).
+        Exception: For any other unexpected errors during the file loading process.
+    """
+    try:
+        if file_path.endswith('.csv'):
+            df = pd.read_csv(file_path, encoding='utf-8')
+        elif file_path.endswith(('.xlsx', '.xls')):
+            df = pd.read_excel(file_path)
+        else:
+            raise ValueError("Unsupported file format. Please use csv, xlsx, or xls.")
+
+        df = df.drop_duplicates()
+        df = df.select_dtypes(include=[np.number])
+        return df
+
+    except FileNotFoundError:
+        print(f"File '{file_path}' not found.")
+        return None
+    except ValueError as ve:
+        print(ve)
+        return None
+    except Exception as e:
+        print(f"An error occurred: {str(e)}")
+        return None
+
+
+def create_x_matrix(data, x_vars):
+    """
+    Creates a 2D matrix of independent variables for use in Ordinary Least Squares (OLS) regression according to the
+    names of the variables. This function also adds a column of ones at the beginning of the matrix to account for
+    the intercept term.
+
+    Args:
+        data (pandas.DataFrame): The dataset containing the independent variables.
+        x_vars (list of str): A list of column names from the dataset to be used as independent variables.
+
+    Returns:
+        numpy.ndarray: A 2D numpy array where each row represents an observation and each column
+                       represents an independent variable. The first column of the matrix is a column
+                       of ones for the intercept term.
+    """
+    x_matrix = data[x_vars]
+    x_matrix = np.hstack((np.ones((x_matrix.shape[0], 1)), x_matrix))
+    return x_matrix
+
+
+def create_y_vector(data, y_var):
+    """
+    Extracts a column from a database according to the y_var label. Will be used to create a dependent variable vector.
+
+    Args:
+        data (pandas.DataFrame): The dataset containing the dependent variable.
+        y_var (str): The column name of the dependent variable in the dataset.
+
+    Returns:
+        numpy.ndarray: A 1D numpy array representing the dependent variable. Each element of this
+                       vector corresponds to an observation in the dataset.
+    """
+    return data[y_var]
+
+
+def calculate_ols(x_matrix, y_vector):
+    """
+    Performs Ordinary Least Squares (OLS) regression to estimate the relationship between
+    a dependent variable and one or more independent variables.
+
+    Args:
+        x_matrix (numpy.ndarray): A 2D array where each row represents an observation and
+                                  each column represents an independent variable. The first column
+                                  should be a column of ones to represent the intercept term.
+        y_vector (numpy.ndarray): A 1D array representing the dependent variable. Each element
+                                  corresponds to an observation in the x_matrix.
+    Returns:
+        numpy.ndarray: Beta coefficients from the regression.
+    """
+
+    beta_vector = np.matmul(x_matrix.T, x_matrix)
+    beta_vector = np.linalg.pinv(beta_vector)
+    beta_vector = np.matmul(beta_vector, x_matrix.T)
+    beta_vector = np.matmul(beta_vector, y_vector)
+
+    return beta_vector
+
+
+def calculate_ols_rsquared(y_vector, x_matrix, beta_vector):
+    """
+    Calculates R-squared and adjusted R-squared for the OLS regression model.
+    R-squared measures how well the independent variables explain the dependent variable.
+    Adjusted R-squared modifies R-squared to account for the number of variables in the model,
+    providing a more accurate measure for models with multiple predictors.
+
+    Args:
+        x_matrix (numpy.ndarray): A 2D array where each row represents an observation and
+                                  each column represents an independent variable. The first column
+                                  should be a column of ones to represent the intercept term.
+        y_vector (numpy.ndarray): A 1D array representing the dependent variable. Each element
+                                  corresponds to an observation in the x_matrix.
+        beta_vector (numpy.ndarray): Vector containing the beta coefficients resulting from the OLS regression.
+
+    Returns:
+        dict: A dictionary containing the R-squared and adjusted R-squared values.
+    """
+
+    y_pred = np.matmul(x_matrix, beta_vector)
+    ssr = np.sum((y_vector - y_pred) ** 2)
+    sst = np.sum((y_vector - np.mean(y_vector)) ** 2)
+    r_squared = 1 - ssr / sst
+
+    n = len(y_vector)
+    k = x_matrix.shape[1] - 1  # Minus 1 to exclude intercept
+
+    adj_r_squared = 1 - (1 - r_squared) * (n - 1) / (n - k - 1) if n > k + 1 else None
+
+    return {
+        "R-squared": r_squared,
+        "R-squared-adj": adj_r_squared
+    }
+
+
+def main():
+    file_path = input('Enter the path to the file you will process: ')
+    data = load_data_file(file_path)
+
+    if data is not None:
+        variable_names = data.columns.tolist()
+
+        print('Enter the dependent variable (y):')
+        print(variable_names)
+        y_var = input('Enter the variable: ').strip()
+
+        print('Enter the independent variables x1, x2, x3, ...:')
+        x_vars = input('Enter the variables separated by comma: ').split(',')
+
+        valid_x_vars = []
+        for x in x_vars:
+            x = x.strip()
+            if x in variable_names and x != y_var:
+                valid_x_vars.append(x)
+            elif x == y_var:
+                print(f"Ignoring independent variable '{x}' as it is equal to the dependent variable")
+            else:
+                print(f"The variable {x} was not found in the database, will be excluded from the regression")
+
+        if y_var not in variable_names:
+            print("Invalid dependent variable name entered.")
+        elif not valid_x_vars:  # if the list of independent variables is empty
+            print("Required at least one valid independent variable")
+        else:
+            # create vector and matrix for calculation
+            x_matrix = create_x_matrix(data, valid_x_vars)
+            y_vector = create_y_vector(data, y_var)
+
+            # calculate OLS
+            beta_vector = calculate_ols(x_matrix, y_vector)
+            # We provide the global variables as a parameters
+            efficacy_ols = calculate_ols_rsquared(y_vector, x_matrix, beta_vector)
+
+            # Constructing and printing the regression equation
+            print(f"The regression equation for {y_var} is:")
+            model_str = f"{y_var} = {beta_vector[0]:.4f}"
+            efficacy_str = f"{efficacy_ols['R-squared-adj'] * 100:.3f}% (Adjusted R-squared)" \
+                if efficacy_ols['R-squared-adj'] is not None \
+                else f"{efficacy_ols['R-squared'] * 100:.3f}% (R-squared)"
+
+            for i, var in enumerate(valid_x_vars, 1):
+                model_str += f" + ({beta_vector[i]:.4f} * {var})"
+            print(model_str)
+
+            print(f"This model approximates the value of {y_var} with an efficacy of {efficacy_str}")
+    else:
+        #Calls the main if there was errors in the database loading process
+        main()
+
+if __name__ == "__main__":
+    main()
